@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Telegram Bot Connector - Debug Version</title>
+    
+    <!-- Zoho SDK Scripts -->
+    <script src="https://js.zohostatic.com/crm/javascript/zcrmjssdk.js"></script>
+    <script src="https://live.zwidgets.com/js-sdk/1.0/ZohoEmbededAppSDK.min.js"></script>
+    <script src="https://js.zohostatic.com/crm/sdk/v3/ZohoEmbededAppSDK.min.js"></script>
+    
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      }
+      .debug-section {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        padding: 15px;
+        margin: 15px 0;
+        border-radius: 5px;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      .debug-title {
+        font-weight: bold;
+        color: #007bff;
+        margin-bottom: 10px;
+      }
+      .test-btn {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        margin: 5px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .test-btn:hover {
+        background: #218838;
+      }
+      .status {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 5px;
+        font-weight: bold;
+      }
+      .success { background: #d4edda; color: #155724; }
+      .error { background: #f8d7da; color: #721c24; }
+      .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>🤖 Telegram Bot Connector - Debug Version</h2>
+      
+      <div class="debug-section">
+        <div class="debug-title">Debug Information:</div>
+        <div id="debugInfo">Loading...</div>
+      </div>
+      
+      <div class="debug-section">
+        <div class="debug-title">Test Functions:</div>
+        <button class="test-btn" onclick="testSDK()">Test SDK</button>
+        <button class="test-btn" onclick="testRecordId()">Test Record ID</button>
+        <button class="test-btn" onclick="testCredentials()">Test Credentials</button>
+        <button class="test-btn" onclick="testBackend()">Test Backend</button>
+      </div>
+      
+      <div id="statusArea"></div>
+      
+      <button class="test-btn" style="width: 100%; padding: 15px; font-size: 16px;" onclick="fullTest()">
+        🔗 Full Connection Test
+      </button>
+    </div>
+
+    <script>
+      let ZOHO = window.ZOHO || {};
+      let debugLog = [];
+      let currentRecordId = null;
+      
+      function log(message) {
+        const timestamp = new Date().toLocaleTimeString();
+        const logEntry = `[${timestamp}] ${message}`;
+        debugLog.push(logEntry);
+        updateDebugDisplay();
+        console.log(logEntry);
+      }
+      
+      function updateDebugDisplay() {
+        const debugDiv = document.getElementById('debugInfo');
+        debugDiv.innerHTML = debugLog.slice(-10).join('<br>');
+      }
+      
+      function showStatus(message, type = 'info') {
+        const statusArea = document.getElementById('statusArea');
+        statusArea.innerHTML = `<div class="status ${type}">${message}</div>`;
+      }
+      
+      // Initialize the widget
+      document.addEventListener('DOMContentLoaded', function() {
+        log("DOM loaded, initializing...");
+        initializeSDK();
+      });
+      
+      function initializeSDK() {
+        log("Checking for ZOHO object...");
+        
+        if (typeof ZOHO === 'undefined') {
+          log("❌ ZOHO object not found, retrying...");
+          setTimeout(initializeSDK, 500);
+          return;
+        }
+        
+        log("✅ ZOHO object found");
+        
+        if (!ZOHO.embeddedApp) {
+          log("❌ ZOHO.embeddedApp not found, retrying...");
+          setTimeout(initializeSDK, 500);
+          return;
+        }
+        
+        log("✅ ZOHO.embeddedApp found");
+        
+        ZOHO.embeddedApp.on("PageLoad", function(data) {
+          log("📄 PageLoad event received");
+          log("PageLoad data: " + JSON.stringify(data, null, 2));
+          
+          if (data && data.EntityId && data.EntityId.length > 0) {
+            currentRecordId = data.EntityId[0];
+            log("✅ Record ID from PageLoad: " + currentRecordId);
+          } else {
+            log("⚠️ No EntityId in PageLoad data");
+          }
+        });
+        
+        ZOHO.embeddedApp.init()
+          .then(function() {
+            log("✅ ZOHO SDK initialized successfully");
+          })
+          .catch(function(error) {
+            log("❌ ZOHO SDK initialization failed: " + error);
+          });
+      }
+      
+      function testSDK() {
+        log("🧪 Testing SDK availability...");
+        
+        const tests = [
+          { name: "ZOHO object", test: () => typeof ZOHO !== 'undefined' },
+          { name: "ZOHO.embeddedApp", test: () => ZOHO && ZOHO.embeddedApp },
+          { name: "ZOHO.CRM", test: () => ZOHO && ZOHO.CRM },
+          { name: "ZOHO.CRM.API", test: () => ZOHO && ZOHO.CRM && ZOHO.CRM.API },
+          { name: "ZOHO.CRM.UI", test: () => ZOHO && ZOHO.CRM && ZOHO.CRM.UI }
+        ];
+        
+        tests.forEach(test => {
+          const result = test.test();
+          log(`${result ? '✅' : '❌'} ${test.name}: ${result}`);
+        });
+      }
+      
+      async function testRecordId() {
+        log("🧪 Testing Record ID retrieval...");
+        
+        try {
+          const recordId = await getCurrentRecordId();
+          log(`✅ Record ID retrieved: ${recordId}`);
+          showStatus(`Record ID: ${recordId}`, 'success');
+        } catch (error) {
+          log(`❌ Record ID test failed: ${error.message}`);
+          showStatus(`Record ID Error: ${error.message}`, 'error');
+        }
+      }
+      
+      async function testCredentials() {
+        log("🧪 Testing credentials retrieval...");
+        
+        try {
+          const recordId = await getCurrentRecordId();
+          if (!recordId) {
+            throw new Error("No record ID available");
+          }
+          
+          const credentials = await fetchCredentialsFromRecord(recordId);
+          log("✅ Credentials retrieved successfully");
+          
+          const masked = {
+            access_token: credentials.access_token ? "***FOUND***" : "MISSING",
+            client_id: credentials.client_id ? "***FOUND***" : "MISSING",
+            client_secret: credentials.client_secret ? "***FOUND***" : "MISSING",
+            refresh_token: credentials.refresh_token ? "***FOUND***" : "MISSING",
+            telegram_chat_id: credentials.telegram_chat_id || "MISSING"
+          };
+          
+          log("Credentials status: " + JSON.stringify(masked, null, 2));
+          showStatus("Credentials retrieved successfully", 'success');
+          
+        } catch (error) {
+          log(`❌ Credentials test failed: ${error.message}`);
+          showStatus(`Credentials Error: ${error.message}`, 'error');
+        }
+      }
+      
+      async function testBackend() {
+        log("🧪 Testing backend connection...");
+        
+        try {
+          const response = await fetch('https://telegram-zoho-bot.onrender.com/');
+          const text = await response.text();
+          log(`✅ Backend response: ${text}`);
+          showStatus("Backend connection successful", 'success');
+        } catch (error) {
+          log(`❌ Backend test failed: ${error.message}`);
+          showStatus(`Backend Error: ${error.message}`, 'error');
+        }
+      }
+      
+      async function fullTest() {
+        log("🚀 Starting full connection test...");
+        
+        try {
+          // Test 1: SDK
+          testSDK();
+          
+          // Test 2: Record ID
+          const recordId = await getCurrentRecordId();
+          log(`✅ Record ID: ${recordId}`);
+          
+          // Test 3: Credentials
+          const credentials = await fetchCredentialsFromRecord(recordId);
+          log("✅ Credentials retrieved");
+          
+          // Test 4: Validation
+          validateCredentials(credentials);
+          log("✅ Credentials validated");
+          
+          // Test 5: Backend registration
+          await registerWithBackend(credentials);
+          log("✅ Backend registration successful");
+          
+          showStatus("🎉 Full test completed successfully! Your Telegram bot is now connected.", 'success');
+          
+        } catch (error) {
+          log(`❌ Full test failed: ${error.message}`);
+          showStatus(`Full Test Error: ${error.message}`, 'error');
+        }
+      }
+      
+      // Copy the main functions from the original widget
+      async function getCurrentRecordId() {
+        if (currentRecordId) {
+          return currentRecordId;
+        }
+        
+        return new Promise((resolve, reject) => {
+          if (ZOHO && ZOHO.CRM && ZOHO.CRM.UI && ZOHO.CRM.UI.Record) {
+            ZOHO.CRM.UI.Record.get()
+              .then(function(recordData) {
+                if (recordData && recordData.data && recordData.data.length > 0) {
+                  const recordId = recordData.data[0].id;
+                  currentRecordId = recordId;
+                  resolve(recordId);
+                } else {
+                  reject(new Error("No record data available"));
+                }
+              })
+              .catch(function(error) {
+                reject(error);
+              });
+          } else {
+            reject(new Error("ZOHO.CRM.UI.Record not available"));
+          }
+        });
+      }
+      
+      async function fetchCredentialsFromRecord(recordId) {
+        return new Promise((resolve, reject) => {
+          const config = {
+            Entity: "telebot__Telegram_Credentials",
+            RecordID: recordId
+          };
+          
+          ZOHO.CRM.API.getRecord(config)
+            .then(function(response) {
+              if (response.data && response.data.length > 0) {
+                const record = response.data[0];
+                const credentials = {
+                  access_token: record.telebot__ACCESS_TOKEN,
+                  client_id: record.telebot__CLIENT_ID,
+                  client_secret: record.telebot__CLIENT_SECRET,
+                  refresh_token: record.telebot__REFRESH_TOKEN,
+                  telegram_chat_id: record.telebot__TELEGRAM_CHAT_ID
+                };
+                resolve(credentials);
+              } else {
+                reject(new Error("No record data found"));
+              }
+            })
+            .catch(function(error) {
+              reject(error);
+            });
+        });
+      }
+      
+      function validateCredentials(credentials) {
+        const required = ['access_token', 'client_id', 'client_secret', 'refresh_token', 'telegram_chat_id'];
+        const missing = [];
+        
+        for (const field of required) {
+          if (!credentials[field] || credentials[field].toString().trim() === '') {
+            missing.push(field);
+          }
+        }
+        
+        if (missing.length > 0) {
+          throw new Error(`Missing required fields: ${missing.join(', ')}`);
+        }
+        
+        if (isNaN(credentials.telegram_chat_id)) {
+          throw new Error("Telegram Chat ID must be a number");
+        }
+      }
+      
+      async function registerWithBackend(credentials) {
+        const backendUrl = 'https://telegram-zoho-bot.onrender.com/register-user';
+        
+        const payload = {
+          telegram_chat_id: parseInt(credentials.telegram_chat_id),
+          client_id: credentials.client_id,
+          client_secret: credentials.client_secret,
+          access_token: credentials.access_token,
+          refresh_token: credentials.refresh_token
+        };
+        
+        const response = await fetch(backendUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(result.message || `Server error: ${response.status}`);
+        }
+        
+        if (!result.success) {
+          throw new Error(result.message || 'Registration failed');
+        }
+        
+        return result;
+      }
+    </script>
+  </body>
+</html>
