@@ -8,8 +8,8 @@ const BOT_TOKEN = "7803103960:AAHfeyMoir-bUGTO7LldOEHUf-DLnW46pMA";
 // Replace these with your Zoho self-client credentials
 const CLIENT_ID = "1000.JI4ZZ7HWHHGSHC5900OK5WLR1HPK5C";
 const CLIENT_SECRET = "b74c2cc9967ccc98a2e32ee7044ec62ae0d410bd4d";
-let REFRESH_TOKEN = "1000.faa21c19a8d6c3d9cb52c5e81a5ad496.73140e414fab5a40fa6cfc55f2d657c9";
-let ACCESS_TOKEN = "1000.b7393374c051c4728769898355e0dc46.e1131ece96dd50f6d4051ded5d7c6a9e";
+let REFRESH_TOKEN = "1000.e2dc155a132551b951b7d2ba0116c621.585a235fe65c43cd21ea759c22020bd9";
+let ACCESS_TOKEN = "1000.79004b7706b87a1115f60b2340a2127a.c4ca5846653f928b39670f2e94223278";
 let tokenExpiry = Date.now() + 3600 * 1000; // 1 hour from now
 
 async function refreshAccessTokenIfNeeded() {
