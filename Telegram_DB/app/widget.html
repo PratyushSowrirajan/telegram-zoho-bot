@@ -364,7 +364,12 @@
       }
       
       async function registerWithBackend(credentials) {
+        // Update this URL to match your actual Render deployment
         const backendUrl = 'https://telegram-zoho-bot.onrender.com/register-user';
+        
+        // If you need to use a different URL, you can set it here
+        // const backendUrl = 'https://your-actual-render-url.onrender.com/register-user';
+        
         console.log("Sending registration to:", backendUrl);
         
         const payload = {

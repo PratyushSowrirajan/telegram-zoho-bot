@@ -1,10 +1,10 @@
 {
   "name": "telegram-zoho-bot-db",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "index-db.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index-db.js",
+    "dev": "nodemon index-db.js"
   },
   "dependencies": {
     "axios": "^1.7.2",
