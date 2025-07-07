@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Telegram Bot Connector</title>
+    
+    <!-- Zoho SDK Scripts -->
+    <script src="https://js.zohostatic.com/crm/javascript/zcrmjssdk.js"></script>
+    <script src="https://live.zwidgets.com/js-sdk/1.0/ZohoEmbededAppSDK.min.js"></script>
+    <script src="https://js.zohostatic.com/crm/sdk/v3/ZohoEmbededAppSDK.min.js"></script>
+    
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 500px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .header h2 {
+        color: #2c5aa0;
+        margin-bottom: 10px;
+      }
+      .status {
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        text-align: center;
+        font-weight: bold;
+      }
+      .status.loading {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+      }
+      .status.success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .status.error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .status.hidden {
+        display: none;
+      }
+      .connect-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        font-size: 16px;
+        border-radius: 5px;
+        cursor: pointer;
+        width: 100%;
+        transition: all 0.3s ease;
+      }
+      .connect-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+      }
+      .connect-btn:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .info {
+        background-color: #e3f2fd;
+        padding: 15px;
+        border-radius: 5px;
+        margin-top: 20px;
+        border-left: 4px solid #2196f3;
+      }
+      .info h4 {
+        margin-top: 0;
+        color: #1976d2;
+      }
+      .credentials-info {
+        margin-top: 20px;
+        font-size: 12px;
+        color: #666;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h2>🤖 Telegram Bot Connector</h2>
+        <p>Connect your CRM to the Telegram Bot</p>
+      </div>
+
+      <div id="statusMessage" class="status hidden"></div>
+
+      <button id="connectBtn" class="connect-btn" onclick="connectTelegramBot()">
+        🔗 Connect to Telegram Bot
+      </button>
+
+      <div class="info">
+        <h4>📋 What happens when you connect?</h4>
+        <ul>
+          <li>✅ Your CRM credentials will be securely stored</li>
+          <li>🤖 Telegram bot will be linked to your CRM</li>
+          <li>📊 You can get your leads via Telegram using /leads command</li>
+          <li>🔒 Your data remains private and secure</li>
+        </ul>
+      </div>
+
+      <div class="credentials-info">
+        <p>This widget will fetch your Telegram credentials from the current record</p>
+      </div>
+    </div>
+
+    <script>
+      let ZOHO = window.ZOHO || {};
+      let currentRecordId = null;
+      let sdkInitialized = false;
+      
+      // Wait for SDK to load and initialize
+      document.addEventListener('DOMContentLoaded', function() {
+        console.log("DOM loaded, initializing SDK...");
+        initializeSDK();
+      });
+      
+      function initializeSDK() {
+        // Wait for ZOHO object to be available
+        if (typeof ZOHO === 'undefined' || !ZOHO.embeddedApp) {
+          console.log("ZOHO SDK not ready, retrying in 500ms...");
+          setTimeout(initializeSDK, 500);
+          return;
+        }
+        
+        console.log("ZOHO SDK available, initializing...");
+        
+        // Initialize the embedded app
+        ZOHO.embeddedApp.on("PageLoad", function(data) {
+          console.log("PageLoad event received:", data);
+          sdkInitialized = true;
+          
+          // Store record ID when page loads
+          if (data && data.EntityId && data.EntityId.length > 0) {
+            currentRecordId = data.EntityId[0];
+            console.log("Record ID captured from PageLoad:", currentRecordId);
+          } else if (data && data.Entity && data.Entity.length > 0) {
+            currentRecordId = data.Entity[0];
+            console.log("Record ID captured from Entity:", currentRecordId);
+          } else {
+            console.log("No EntityId found in PageLoad data");
+          }
+        });
+
+        ZOHO.embeddedApp.init()
+          .then(function() {
+            console.log("✅ ZOHO SDK initialized successfully");
+          })
+          .catch(function(error) {
+            console.error("❌ ZOHO SDK initialization failed:", error);
+          });
+      }
+
+      async function connectTelegramBot() {
+        const btn = document.getElementById('connectBtn');
+        const status = document.getElementById('statusMessage');
+        
+        try {
+          // Check if SDK is initialized
+          if (!sdkInitialized) {
+            throw new Error("SDK not initialized yet. Please wait a moment and try again.");
+          }
+          
+          // Disable button and show loading
+          btn.disabled = true;
+          btn.innerHTML = '🔄 Connecting...';
+          showStatus('loading', '🔄 Fetching your credentials...');
+          
+          console.log("Starting connection process...");
+          
+          // Get current record ID
+          const recordId = await getCurrentRecordId();
+          console.log("Using record ID:", recordId);
+          
+          if (!recordId) {
+            throw new Error("No record ID found. Please ensure you're viewing a Telegram Credentials record.");
+          }
+          
+          // Fetch credentials from the current record
+          const credentials = await fetchCredentialsFromRecord(recordId);
+          console.log("Credentials fetched:", {
+            ...credentials,
+            access_token: credentials.access_token ? "Found" : "Missing",
+            client_secret: credentials.client_secret ? "Found" : "Missing"
+          });
+          
+          // Validate credentials
+          validateCredentials(credentials);
+          
+          // Send credentials to backend
+          showStatus('loading', '📤 Registering with Telegram Bot server...');
+          await registerWithBackend(credentials);
+          
+          // Success
+          showStatus('success', '✅ Successfully connected to Telegram Bot! You can now use /leads in Telegram.');
+          btn.innerHTML = '✅ Connected Successfully!';
+          
+        } catch (error) {
+          console.error("Connection failed:", error);
+          showStatus('error', `❌ Connection failed: ${error.message}`);
+          btn.disabled = false;
+          btn.innerHTML = '🔗 Connect to Telegram Bot';
+        }
+      }
+      
+      async function getCurrentRecordId() {
+        // If we already have the record ID from page load, use it
+        if (currentRecordId) {
+          console.log("Using cached record ID:", currentRecordId);
+          return currentRecordId;
+        }
+        
+        // Try different methods to get record ID
+        return new Promise((resolve, reject) => {
+          console.log("Attempting to get record ID...");
+          
+          // Method 1: Try ZOHO.CRM.UI.Record.get() if available
+          if (ZOHO && ZOHO.CRM && ZOHO.CRM.UI && ZOHO.CRM.UI.Record) {
+            console.log("Trying ZOHO.CRM.UI.Record.get()...");
+            ZOHO.CRM.UI.Record.get()
+              .then(function(recordData) {
+                console.log("Record.get() response:", recordData);
+                if (recordData && recordData.data && recordData.data.length > 0) {
+                  const recordId = recordData.data[0].id;
+                  console.log("Got record ID from UI.Record.get:", recordId);
+                  currentRecordId = recordId;
+                  resolve(recordId);
+                } else {
+                  tryAlternativeMethod();
+                }
+              })
+              .catch(function(error) {
+                console.error("Error with UI.Record.get:", error);
+                tryAlternativeMethod();
+              });
+          } else {
+            console.log("ZOHO.CRM.UI.Record not available, trying alternative...");
+            tryAlternativeMethod();
+          }
+          
+          function tryAlternativeMethod() {
+            // Method 2: Try to get from URL parameters or embedded app context
+            const urlParams = new URLSearchParams(window.location.search);
+            const recordIdFromUrl = urlParams.get('recordId') || urlParams.get('id');
+            
+            if (recordIdFromUrl) {
+              console.log("Got record ID from URL:", recordIdFromUrl);
+              currentRecordId = recordIdFromUrl;
+              resolve(recordIdFromUrl);
+            } else {
+              // Method 3: Try getting from embedded app context
+              if (ZOHO && ZOHO.embeddedApp) {
+                ZOHO.embeddedApp.getPageInfo()
+                  .then(function(pageInfo) {
+                    console.log("Page info:", pageInfo);
+                    if (pageInfo && pageInfo.EntityId) {
+                      const recordId = Array.isArray(pageInfo.EntityId) ? pageInfo.EntityId[0] : pageInfo.EntityId;
+                      console.log("Got record ID from page info:", recordId);
+                      currentRecordId = recordId;
+                      resolve(recordId);
+                    } else {
+                      reject(new Error("Could not determine record ID. Please ensure you're viewing a Telegram Credentials record."));
+                    }
+                  })
+                  .catch(function(error) {
+                    console.error("Error getting page info:", error);
+                    reject(new Error("Failed to get record ID: " + error.message));
+                  });
+              } else {
+                reject(new Error("ZOHO embedded app not available"));
+              }
+            }
+          }
+        });
+      }
+      
+      async function fetchCredentialsFromRecord(recordId) {
+        return new Promise((resolve, reject) => {
+          const config = {
+            Entity: "telebot__Telegram_Credentials",
+            RecordID: recordId
+          };
+          
+          console.log("Fetching record with config:", config);
+          
+          // Check if ZOHO.CRM.API is available
+          if (!ZOHO || !ZOHO.CRM || !ZOHO.CRM.API || !ZOHO.CRM.API.getRecord) {
+            reject(new Error("ZOHO CRM API not available. Please ensure the SDK is properly loaded."));
+            return;
+          }
+          
+          ZOHO.CRM.API.getRecord(config)
+            .then(function(response) {
+              console.log("CRM API Response:", response);
+              
+              if (response.data && response.data.length > 0) {
+                const record = response.data[0];
+                
+                const credentials = {
+                  access_token: record.telebot__ACCESS_TOKEN,
+                  client_id: record.telebot__CLIENT_ID,
+                  client_secret: record.telebot__CLIENT_SECRET,
+                  refresh_token: record.telebot__REFRESH_TOKEN,
+                  telegram_chat_id: record.telebot__TELEGRAM_CHAT_ID
+                };
+                
+                console.log("Extracted credentials:", {
+                  access_token: credentials.access_token ? "Found" : "Missing",
+                  client_id: credentials.client_id ? "Found" : "Missing",
+                  client_secret: credentials.client_secret ? "Found" : "Missing",
+                  refresh_token: credentials.refresh_token ? "Found" : "Missing",
+                  telegram_chat_id: credentials.telegram_chat_id ? "Found" : "Missing"
+                });
+                
+                resolve(credentials);
+              } else {
+                reject(new Error("No record data found. Please check if the record exists and has data."));
+              }
+            })
+            .catch(function(error) {
+              console.error("CRM API Error:", error);
+              reject(new Error("Failed to fetch record: " + (error.message || error)));
+            });
+        });
+      }
+      
+      function validateCredentials(credentials) {
+        const required = ['access_token', 'client_id', 'client_secret', 'refresh_token', 'telegram_chat_id'];
+        const missing = [];
+        
+        for (const field of required) {
+          if (!credentials[field] || credentials[field].toString().trim() === '') {
+            missing.push(field);
+          }
+        }
+        
+        if (missing.length > 0) {
+          throw new Error(`Missing required fields: ${missing.join(', ')}. Please fill all fields in the record.`);
+        }
+        
+        // Validate Telegram Chat ID format (should be a number)
+        if (isNaN(credentials.telegram_chat_id)) {
+          throw new Error("Telegram Chat ID must be a number. Get your Chat ID by messaging @userinfobot on Telegram.");
+        }
+      }
+      
+      async function registerWithBackend(credentials) {
+        const backendUrl = 'https://telegram-zoho-bot.onrender.com/register-user';
+        console.log("Sending registration to:", backendUrl);
+        
+        const payload = {
+          telegram_chat_id: parseInt(credentials.telegram_chat_id),
+          client_id: credentials.client_id,
+          client_secret: credentials.client_secret,
+          access_token: credentials.access_token,
+          refresh_token: credentials.refresh_token
+        };
+        
+        console.log("Registration payload:", {
+          telegram_chat_id: payload.telegram_chat_id,
+          client_id: payload.client_id ? "Found" : "Missing",
+          client_secret: "***",
+          access_token: "***",
+          refresh_token: "***"
+        });
+        
+        try {
+          const response = await fetch(backendUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+          });
+          
+          console.log("Backend response status:", response.status);
+          
+          const result = await response.json();
+          console.log("Backend registration result:", result);
+          
+          if (!response.ok) {
+            throw new Error(result.message || `Server error: ${response.status}`);
+          }
+          
+          if (!result.success) {
+            throw new Error(result.message || 'Registration failed');
+          }
+          
+          console.log("✅ Successfully registered user in PostgreSQL database");
+          return result;
+        } catch (error) {
+          console.error("Backend registration error:", error);
+          throw new Error("Failed to register with server: " + error.message);
+        }
+      }
+      
+      function showStatus(type, message) {
+        const status = document.getElementById('statusMessage');
+        status.className = `status ${type}`;
+        status.textContent = message;
+      }
+    </script>
+  </body>
+</html>
