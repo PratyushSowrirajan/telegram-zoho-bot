@@ -83,6 +83,42 @@ app.get("/webhook-info", async (req, res) => {
   }
 });
 
+// Add test endpoint for Zoho API
+app.get("/test-zoho", async (req, res) => {
+  try {
+    await refreshAccessTokenIfNeeded();
+    
+    console.log("🧪 Testing Zoho API connection...");
+    console.log("🔑 Access token:", ACCESS_TOKEN.substring(0, 20) + "...");
+    console.log("⏰ Token expiry:", new Date(tokenExpiry).toISOString());
+    
+    const response = await axios.get(
+      "https://www.zohoapis.com/crm/v2/Leads?per_page=1",
+      {
+        headers: { Authorization: `Zoho-oauthtoken ${ACCESS_TOKEN}` }
+      }
+    );
+    
+    res.json({
+      success: true,
+      message: "✅ Zoho API connection successful!",
+      leads_count: response.data.data?.length || 0,
+      token_status: "Valid",
+      response_data: response.data
+    });
+  } catch (error) {
+    console.error("❌ Zoho API Test Error:", error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      message: "❌ Zoho API connection failed",
+      error_status: error.response?.status,
+      error_message: error.message,
+      error_data: error.response?.data,
+      token_used: ACCESS_TOKEN.substring(0, 20) + "..."
+    });
+  }
+});
+
 app.post("/telegram-webhook", async (req, res) => {
   console.log("📨 Received webhook:", JSON.stringify(req.body, null, 2));
   
@@ -103,6 +139,9 @@ app.post("/telegram-webhook", async (req, res) => {
 
     try {
       console.log("🔍 Fetching leads from Zoho CRM...");
+      console.log("🔑 Using access token:", ACCESS_TOKEN.substring(0, 20) + "...");
+      console.log("⏰ Token expiry:", new Date(tokenExpiry).toISOString());
+      
       const response = await axios.get(
         "https://www.zohoapis.com/crm/v2/Leads?sort_by=Created_Time&sort_order=desc&per_page=5",
         {
@@ -131,12 +170,29 @@ app.post("/telegram-webhook", async (req, res) => {
       console.log("✅ Message sent successfully");
       res.send("Message sent");
     } catch (e) {
-      console.error("❌ CRM Fetch Error:", e.response?.data || e.message);
+      console.error("❌ CRM Fetch Error Details:");
+      console.error("Status:", e.response?.status);
+      console.error("Status Text:", e.response?.statusText);
+      console.error("Error Data:", JSON.stringify(e.response?.data, null, 2));
+      console.error("Error Message:", e.message);
+      console.error("Full Error:", e);
       
-      // Send error message to user
+      // Send error message to user with more details
+      let errorMessage = "❌ Sorry, there was an error fetching leads. ";
+      
+      if (e.response?.status === 401) {
+        errorMessage += "Authentication failed. The access token may be expired or invalid.";
+      } else if (e.response?.status === 403) {
+        errorMessage += "Access denied. Please check your Zoho CRM permissions.";
+      } else if (e.response?.status === 404) {
+        errorMessage += "Leads module not found. Please check your Zoho CRM setup.";
+      } else {
+        errorMessage += "Please try again later.";
+      }
+      
       await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         chat_id: chatId,
-        text: "❌ Sorry, there was an error fetching leads. Please try again later."
+        text: errorMessage
       });
       
       res.status(500).send("Error fetching leads");
