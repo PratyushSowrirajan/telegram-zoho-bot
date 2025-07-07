@@ -13,8 +13,19 @@ let ACCESS_TOKEN = "1000.b7393374c051c4728769898355e0dc46.e1131ece96dd50f6d4051d
 let tokenExpiry = Date.now() + 3600 * 1000; // 1 hour from now
 
 async function refreshAccessTokenIfNeeded() {
-  if (Date.now() >= tokenExpiry) {
+  // Force refresh if token is expired or invalid
+  const needsRefresh = Date.now() >= tokenExpiry;
+  
+  console.log("🔄 Token refresh check:");
+  console.log("  Current time:", new Date().toISOString());
+  console.log("  Token expiry:", new Date(tokenExpiry).toISOString());
+  console.log("  Needs refresh:", needsRefresh);
+  
+  if (needsRefresh) {
     try {
+      console.log("🔄 Refreshing access token...");
+      console.log("🔑 Using refresh token:", REFRESH_TOKEN.substring(0, 20) + "...");
+      
       const response = await axios.post("https://accounts.zoho.com/oauth/v2/token", null, {
         params: {
           refresh_token: REFRESH_TOKEN,
@@ -24,12 +35,46 @@ async function refreshAccessTokenIfNeeded() {
         }
       });
 
-      ACCESS_TOKEN = response.data.access_token;
-      tokenExpiry = Date.now() + 3600 * 1000; // reset expiry time
-      console.log("✅ Access token refreshed.");
+      if (response.data.access_token) {
+        ACCESS_TOKEN = response.data.access_token;
+        tokenExpiry = Date.now() + 3600 * 1000; // reset expiry time
+        console.log("✅ Access token refreshed successfully");
+        console.log("🔑 New token:", ACCESS_TOKEN.substring(0, 20) + "...");
+        console.log("⏰ New expiry:", new Date(tokenExpiry).toISOString());
+      } else {
+        console.error("❌ No access_token in refresh response:", response.data);
+      }
     } catch (err) {
-      console.error("❌ Error refreshing access token:", err.response?.data || err.message);
+      console.error("❌ Error refreshing access token:");
+      console.error("  Status:", err.response?.status);
+      console.error("  Error data:", err.response?.data);
+      console.error("  Error message:", err.message);
+      throw err; // Re-throw to handle in calling function
     }
+  }
+}
+
+// Force refresh token on startup since current one seems invalid
+async function forceRefreshToken() {
+  try {
+    console.log("🔄 Force refreshing token on startup...");
+    const response = await axios.post("https://accounts.zoho.com/oauth/v2/token", null, {
+      params: {
+        refresh_token: REFRESH_TOKEN,
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: "refresh_token"
+      }
+    });
+
+    if (response.data.access_token) {
+      ACCESS_TOKEN = response.data.access_token;
+      tokenExpiry = Date.now() + 3600 * 1000;
+      console.log("✅ Token force-refreshed on startup");
+      console.log("🔑 New token:", ACCESS_TOKEN.substring(0, 20) + "...");
+    }
+  } catch (err) {
+    console.error("❌ Failed to force refresh token:", err.response?.data || err.message);
   }
 }
 
@@ -86,9 +131,11 @@ app.get("/webhook-info", async (req, res) => {
 // Add test endpoint for Zoho API
 app.get("/test-zoho", async (req, res) => {
   try {
-    await refreshAccessTokenIfNeeded();
-    
     console.log("🧪 Testing Zoho API connection...");
+    
+    // Force refresh token first
+    await forceRefreshToken();
+    
     console.log("🔑 Access token:", ACCESS_TOKEN.substring(0, 20) + "...");
     console.log("⏰ Token expiry:", new Date(tokenExpiry).toISOString());
     
@@ -135,19 +182,39 @@ app.post("/telegram-webhook", async (req, res) => {
   console.log(`📱 Message from ${chatId}: ${text}`);
 
   if (text === "/leads") {
-    await refreshAccessTokenIfNeeded();
-
     try {
       console.log("🔍 Fetching leads from Zoho CRM...");
+      
+      // First attempt with current token
+      await refreshAccessTokenIfNeeded();
       console.log("🔑 Using access token:", ACCESS_TOKEN.substring(0, 20) + "...");
       console.log("⏰ Token expiry:", new Date(tokenExpiry).toISOString());
       
-      const response = await axios.get(
-        "https://www.zohoapis.com/crm/v2/Leads?sort_by=Created_Time&sort_order=desc&per_page=5",
-        {
-          headers: { Authorization: `Zoho-oauthtoken ${ACCESS_TOKEN}` }
+      let response;
+      try {
+        response = await axios.get(
+          "https://www.zohoapis.com/crm/v2/Leads?sort_by=Created_Time&sort_order=desc&per_page=5",
+          {
+            headers: { Authorization: `Zoho-oauthtoken ${ACCESS_TOKEN}` }
+          }
+        );
+      } catch (firstAttemptError) {
+        // If 401, force refresh and try again
+        if (firstAttemptError.response?.status === 401) {
+          console.log("🔄 First attempt failed with 401, force refreshing token...");
+          await forceRefreshToken();
+          
+          console.log("🔄 Retrying with new token:", ACCESS_TOKEN.substring(0, 20) + "...");
+          response = await axios.get(
+            "https://www.zohoapis.com/crm/v2/Leads?sort_by=Created_Time&sort_order=desc&per_page=5",
+            {
+              headers: { Authorization: `Zoho-oauthtoken ${ACCESS_TOKEN}` }
+            }
+          );
+        } else {
+          throw firstAttemptError;
         }
-      );
+      }
 
       const leads = response.data.data;
       let reply = "📋 *Latest Leads:*\n\n";
@@ -219,4 +286,9 @@ app.post("/telegram-webhook", async (req, res) => {
   }
 });
 
-app.listen(3000, () => console.log("🚀 Webhook running on port 3000"));
+app.listen(3000, async () => {
+  console.log("🚀 Webhook running on port 3000");
+  
+  // Force refresh token on startup since current one seems invalid
+  await forceRefreshToken();
+});
