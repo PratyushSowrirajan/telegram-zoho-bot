@@ -104,7 +104,7 @@
 
       <div id="statusMessage" class="status hidden"></div>
 
-      <button id="connectBtn" class="connect-btn" onclick="connectTelegramBot()">
+      <button id="connectBtn" class="connect-btn">
         🔗 Connect to Telegram Bot
       </button>
 
@@ -132,6 +132,15 @@
       document.addEventListener('DOMContentLoaded', function() {
         console.log("DOM loaded, initializing SDK...");
         initializeSDK();
+        
+        // Add fallback event listener in case SDK doesn't load
+        setTimeout(function() {
+          const connectBtn = document.getElementById('connectBtn');
+          if (connectBtn && !connectBtn.onclick) {
+            connectBtn.addEventListener('click', connectTelegramBot);
+            console.log("✅ Fallback button event listener added");
+          }
+        }, 3000);
       });
       
       function initializeSDK() {
@@ -164,6 +173,13 @@
         ZOHO.embeddedApp.init()
           .then(function() {
             console.log("✅ ZOHO SDK initialized successfully");
+            
+            // Add event listener to the button after SDK is ready
+            const connectBtn = document.getElementById('connectBtn');
+            if (connectBtn) {
+              connectBtn.addEventListener('click', connectTelegramBot);
+              console.log("✅ Button event listener added");
+            }
           })
           .catch(function(error) {
             console.error("❌ ZOHO SDK initialization failed:", error);
@@ -171,6 +187,7 @@
       }
 
       async function connectTelegramBot() {
+        console.log("🔗 Connect button clicked!");
         const btn = document.getElementById('connectBtn');
         const status = document.getElementById('statusMessage');
         
@@ -423,6 +440,11 @@
         status.className = `status ${type}`;
         status.textContent = message;
       }
+      
+      // Make function globally available
+      window.connectTelegramBot = connectTelegramBot;
+      
+      console.log("✅ Widget script loaded successfully");
     </script>
   </body>
 </html>
