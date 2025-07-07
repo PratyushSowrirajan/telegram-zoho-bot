@@ -5,12 +5,70 @@ app.use(express.json());
 
 const BOT_TOKEN = "7803103960:AAHfeyMoir-bUGTO7LldOEHUf-DLnW46pMA";
 
-// Replace these with your Zoho self-client credentials
-const CLIENT_ID = "1000.JI4ZZ7HWHHGSHC5900OK5WLR1HPK5C";
-const CLIENT_SECRET = "b74c2cc9967ccc98a2e32ee7044ec62ae0d410bd4d";
-let REFRESH_TOKEN = "1000.e2dc155a132551b951b7d2ba0116c621.585a235fe65c43cd21ea759c22020bd9";
-let ACCESS_TOKEN = "1000.79004b7706b87a1115f60b2340a2127a.c4ca5846653f928b39670f2e94223278";
+// Initial bootstrap credentials - only used to fetch the real credentials from CRM
+// You'll need these minimal credentials to make the first API call to get the custom properties
+const BOOTSTRAP_CLIENT_ID = "1000.JI4ZZ7HWHHGSHC5900OK5WLR1HPK5C";
+const BOOTSTRAP_CLIENT_SECRET = "b74c2cc9967ccc98a2e32ee7044ec62ae0d410bd4d";
+const BOOTSTRAP_ACCESS_TOKEN = "1000.79004b7706b87a1115f60b2340a2127a.c4ca5846653f928b39670f2e94223278";
+
+// Credentials - will be loaded from environment variables or CRM custom properties
+let CLIENT_ID = process.env.ZOHO_CLIENT_ID || BOOTSTRAP_CLIENT_ID;
+let CLIENT_SECRET = process.env.ZOHO_CLIENT_SECRET || BOOTSTRAP_CLIENT_SECRET;
+let REFRESH_TOKEN = process.env.ZOHO_REFRESH_TOKEN || "1000.e2dc155a132551b951b7d2ba0116c621.585a235fe65c43cd21ea759c22020bd9";
+let ACCESS_TOKEN = process.env.ZOHO_ACCESS_TOKEN || BOOTSTRAP_ACCESS_TOKEN;
 let tokenExpiry = Date.now() + 3600 * 1000; // 1 hour from now
+
+// Function to fetch credentials from CRM custom properties (if environment variables are not set)
+async function fetchCredentialsFromCRM() {
+  // Only fetch from CRM if environment variables are not set
+  if (process.env.ZOHO_CLIENT_ID && process.env.ZOHO_CLIENT_SECRET && 
+      process.env.ZOHO_REFRESH_TOKEN && process.env.ZOHO_ACCESS_TOKEN) {
+    console.log("✅ Using environment variables for credentials");
+    return;
+  }
+
+  try {
+    console.log("🔍 Fetching credentials from CRM custom properties...");
+    
+    // Use bootstrap token to fetch custom properties from your CRM
+    // This assumes you have a record (like a Lead or Contact) where you've stored these custom fields
+    // You'll need to replace 'RECORD_ID' with the actual ID of the record containing your credentials
+    const response = await axios.get(
+      "https://www.zohoapis.com/crm/v2/Leads/RECORD_ID", // Replace RECORD_ID with actual record ID
+      {
+        headers: { Authorization: `Zoho-oauthtoken ${BOOTSTRAP_ACCESS_TOKEN}` }
+      }
+    );
+
+    const recordData = response.data.data[0];
+    
+    // Extract credentials from custom fields
+    CLIENT_ID = recordData.telebot__Client_Id;
+    CLIENT_SECRET = recordData.telebot__Client_Secret;
+    REFRESH_TOKEN = recordData.telebot__Refresh_token;
+    ACCESS_TOKEN = recordData.telebot__Access_token;
+
+    console.log("✅ Credentials fetched from CRM successfully");
+    console.log("🔑 Client ID:", CLIENT_ID ? "Found" : "Missing");
+    console.log("🔐 Client Secret:", CLIENT_SECRET ? "Found" : "Missing");
+    console.log("🔄 Refresh Token:", REFRESH_TOKEN ? "Found" : "Missing");
+    console.log("🎫 Access Token:", ACCESS_TOKEN ? "Found" : "Missing");
+
+    if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN || !ACCESS_TOKEN) {
+      throw new Error("Some credentials are missing from CRM custom properties");
+    }
+
+  } catch (err) {
+    console.error("❌ Error fetching credentials from CRM:", err.message);
+    console.error("Using bootstrap credentials as fallback...");
+    
+    // Fallback to bootstrap credentials
+    CLIENT_ID = BOOTSTRAP_CLIENT_ID;
+    CLIENT_SECRET = BOOTSTRAP_CLIENT_SECRET;
+    ACCESS_TOKEN = BOOTSTRAP_ACCESS_TOKEN;
+    REFRESH_TOKEN = "1000.e2dc155a132551b951b7d2ba0116c621.585a235fe65c43cd21ea759c22020bd9"; // Keep the current one as fallback
+  }
+}
 
 async function refreshAccessTokenIfNeeded() {
   // Force refresh if token is expired or invalid
@@ -289,6 +347,9 @@ app.post("/telegram-webhook", async (req, res) => {
 app.listen(3000, async () => {
   console.log("🚀 Webhook running on port 3000");
   
-  // Force refresh token on startup since current one seems invalid
+  // First, fetch credentials from CRM
+  await fetchCredentialsFromCRM();
+  
+  // Then force refresh token with the fetched credentials
   await forceRefreshToken();
 });
