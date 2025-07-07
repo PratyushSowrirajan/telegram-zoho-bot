@@ -37,15 +37,72 @@ app.get("/", (req, res) => {
   res.send("✅ Webhook server is running");
 });
 
+// Add webhook setup endpoint
+app.get("/setup-webhook", async (req, res) => {
+  try {
+    const webhookUrl = "https://telegram-zoho-bot.onrender.com/telegram-webhook";
+    const response = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`, {
+      url: webhookUrl
+    });
+    
+    if (response.data.ok) {
+      res.json({
+        success: true,
+        message: "✅ Webhook set up successfully!",
+        webhook_url: webhookUrl
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: "❌ Failed to set up webhook",
+        error: response.data
+      });
+    }
+  } catch (error) {
+    console.error("❌ Webhook setup error:", error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      message: "❌ Error setting up webhook",
+      error: error.message
+    });
+  }
+});
+
+// Add webhook info endpoint
+app.get("/webhook-info", async (req, res) => {
+  try {
+    const response = await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
+    res.json(response.data);
+  } catch (error) {
+    console.error("❌ Webhook info error:", error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      message: "❌ Error getting webhook info",
+      error: error.message
+    });
+  }
+});
+
 app.post("/telegram-webhook", async (req, res) => {
+  console.log("📨 Received webhook:", JSON.stringify(req.body, null, 2));
+  
   const message = req.body.message;
+  
+  if (!message) {
+    console.log("⚠️ No message in webhook data");
+    return res.send("No message");
+  }
+  
   const chatId = message.chat.id;
   const text = message.text;
+  
+  console.log(`📱 Message from ${chatId}: ${text}`);
 
   if (text === "/leads") {
     await refreshAccessTokenIfNeeded();
 
     try {
+      console.log("🔍 Fetching leads from Zoho CRM...");
       const response = await axios.get(
         "https://www.zohoapis.com/crm/v2/Leads?sort_by=Created_Time&sort_order=desc&per_page=5",
         {
@@ -56,23 +113,53 @@ app.post("/telegram-webhook", async (req, res) => {
       const leads = response.data.data;
       let reply = "📋 *Latest Leads:*\n\n";
 
-      leads.forEach((lead, i) => {
-        reply += `${i + 1}. 👤 ${lead.First_Name || ""} ${lead.Last_Name || ""} | 📞 ${lead.Phone || "-"} | ✉️ ${lead.Email || "-"} | 🏢 ${lead.Company || "-"}\n`;
-      });
+      if (!leads || leads.length === 0) {
+        reply = "📋 No leads found in your CRM.";
+      } else {
+        leads.forEach((lead, i) => {
+          reply += `${i + 1}. 👤 ${lead.First_Name || ""} ${lead.Last_Name || ""} | 📞 ${lead.Phone || "-"} | ✉️ ${lead.Email || "-"} | 🏢 ${lead.Company || "-"}\n`;
+        });
+      }
 
+      console.log("📤 Sending reply to Telegram...");
       await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         chat_id: chatId,
         text: reply,
         parse_mode: "Markdown"
       });
 
+      console.log("✅ Message sent successfully");
       res.send("Message sent");
     } catch (e) {
       console.error("❌ CRM Fetch Error:", e.response?.data || e.message);
+      
+      // Send error message to user
+      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        chat_id: chatId,
+        text: "❌ Sorry, there was an error fetching leads. Please try again later."
+      });
+      
       res.status(500).send("Error fetching leads");
     }
+  } else if (text === "/start") {
+    const welcomeMessage = "👋 Welcome to the Zoho CRM Bot!\n\nUse /leads to get the latest leads from your CRM.";
+    
+    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      chat_id: chatId,
+      text: welcomeMessage
+    });
+    
+    res.send("Welcome message sent");
   } else {
-    res.send("Unknown command");
+    // Send help message for unknown commands
+    const helpMessage = "❓ Unknown command. Use /leads to get the latest leads from your CRM.";
+    
+    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      chat_id: chatId,
+      text: helpMessage
+    });
+    
+    res.send("Help message sent");
   }
 });
 
